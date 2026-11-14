@@ -497,7 +497,11 @@ sudo apt update
 sudo apt install netwox
 ```
 
+# 由于遇到较大的技术问题以及近日各种考试，后续步骤遇到了一定的时间问题；会在第二天早上之前完成
 
+届时将会发给助教以及及时更新在 https://github.com/leo-grayrat/cybersecurity-xjtu-26/blob/master/exp1/DNS%E5%AE%9E%E9%AA%8C.md
+
+十分抱歉再次拖延！确实不熟悉 Linux 以及网络相关操作 qwq
 
 ## 缓存投毒（未完成）
 

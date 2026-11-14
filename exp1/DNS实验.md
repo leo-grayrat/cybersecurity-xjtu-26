@@ -1,4 +1,4 @@
-## HOST配置
+## HOST 配置
 
 ![image-20261112230226500](./DNS实验.assets/image-20261112230226500.png)
 
@@ -245,7 +245,7 @@ ns4.dnsv5.com.		5	IN	AAAA	2402:4e00:1231::8
 
 ```
 
-## DNS投毒实验
+## DNS 前置工作
 
 ### 启动BIND9
 
@@ -405,3 +405,100 @@ A 则很简单，就表示**域名对应的 IPv4 地址**。
 > 需要注意：创建反向区域数据文件，并不会自动让 BIND9 对外提供反向解析。必须在配置文件中声明该区域。
 >
 > 而且原文后面的实验把反向区域声明注释掉了，所以在该状态下，即使文件存在，反向解析也可能无法使用。
+
+#### `named.conf`
+
+![image-20261114224657289](./DNS实验.assets/image-20261114224657289.png)
+
+加入 `example.com` 区域声明：
+
+- `zone "example.com"`：声明管理的区域
+- `type master`：此 DNS 服务器保存该区域的主数据
+- `file`：指定记录从哪个文件读取
+
+#### 配置结果
+
+![image-20261114225716951](./DNS实验.assets/image-20261114225716951.png)
+
+在 **131 攻击端** 进行查询，可以看到 `dig @192.168.187.130 www.example.com A` ，查询成功、确实发送到了130。
+
+### DNS 缓存
+
+#### 清理 DNS 缓存
+
+```
+sudo rndc flush 				# 清除 DNS 缓存
+sudo systemctl restart bind9 	# 重启 DNS 服务
+systemctl status bind9 			# 检查服务运行状态
+```
+
+`rndc` 是 BIND9 的远程管理工具，可以让管理员向正在运行的 DNS 服务器发送管理命令。
+
+![image-20261114230348851](./DNS实验.assets/image-20261114230348851.png)
+
+> 这里刷新步骤出问题是因为**主机名和 hosts 里的名字不匹配**。
+>
+> 主机名是 **`server`** ， `/etc/hosts` 里只有 **`ubuntu`** 。
+>
+> 修改后可以正常刷新~
+
+#### 配置攻击端
+
+![image-20261114231252069](./DNS实验.assets/image-20261114231252069.png)
+
+修改后客户端会把 DNS 请求交给 130 的服务器。
+
+#### 检查 DNS 缓存
+
+![image-20261114231823716](./DNS实验.assets/image-20261114231823716.png)
+
+```
+sudo rndc dumpdb
+```
+
+此命令将服务器当前的缓存等数据写入转储文件。
+
+显然此刻缓存里面还没有微博，因为还没有进行访问。
+
+#### 访问微博 查看缓存
+
+在 131 机器访问 www.weibo.com 之后：
+
+1. 浏览器发起访问需要得到网站的 IP 地址，由（客户端的 DNS 已经指向的） 130 处理相应的 DNS 请求。
+2. 对于不由自己直接管理的域名，BIND9 需要解析上游服务器获取答案。
+3. 得到结果后，服务器可以将这些记录**缓存一定时间**。
+
+回到 130 机器，重新保存缓存文件然后查询：
+
+![image-20261114232410153](./DNS实验.assets/image-20261114232410153.png)
+
+查询后出现了**访问域名有关的**记录：
+
+```
+weibo.com.		172628	NS	ns1.sina.com.cn.
+				172628	NS	ns2.sina.com.cn.
+				172628	NS	ns3.sina.com.
+				172628	NS	ns3.sina.com.cn.
+				172628	NS	ns4.sina.com.
+				172628	NS	ns4.sina.com.cn.
+```
+
+## DNS 欺骗
+
+![img](data:image/svg+xml;charset=utf-8,%3Csvg%20font-family%3D%22-apple-system-body%2C%20ui-sans-serif%2C%20-apple-system%2C%20system-ui%2C%20Segoe%20UI%2C%20Helvetica%2C%20Apple%20Color%20Emoji%2C%20Arial%2C%20sans-serif%2C%20Segoe%20UI%20Emoji%2C%20Segoe%20UI%20Symbol%22%20font-weight%3D%22400%22%20data-d-component%3D%22svg%22%20fill%3D%22currentColor%22%20style%3D%22color%3Argb(13%2C%2013%2C%2013)%22%20viewBox%3D%220%200%20330%20124%22%20width%3D%22100%25%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20x%3D%229%22%20y%3D%2228%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23DDEBFA%22%2F%3E%3Ctext%20x%3D%2254%22%20y%3D%2247%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23245B96%22%3E%E5%AE%A2%E6%88%B7%E7%AB%AF%3C%2Ftext%3E%3Ctext%20x%3D%2254%22%20y%3D%2262%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23245B96%22%3E%E5%8F%91%E5%87%BA%E6%9F%A5%E8%AF%A2%3C%2Ftext%3E%3Crect%20x%3D%22231%22%20y%3D%2228%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23FBE6E2%22%2F%3E%3Ctext%20x%3D%22276%22%20y%3D%2247%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23A54335%22%3E%E4%BC%AA%E9%80%A0%E5%BA%94%E7%AD%94%3C%2Ftext%3E%3Ctext%20x%3D%22276%22%20y%3D%2262%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E6%8F%90%E4%BE%9B%E9%94%99%E8%AF%AF%E5%9C%B0%E5%9D%80%3C%2Ftext%3E%3Cpath%20d%3D%22M99%2042%20H227%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%2F%3E%3Cpath%20d%3D%22M221%2037%20L229%2042%20L221%2047%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M231%2061%20H103%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.5%22%20stroke-dasharray%3D%225%204%22%2F%3E%3Cpath%20d%3D%22M109%2056%20L101%2061%20L109%2066%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%2F%3E%3Ctext%20x%3D%22165%22%20y%3D%2225%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22currentColor%22%3E%E6%9F%A5%E8%AF%A2%3C%2Ftext%3E%3Ctext%20x%3D%22165%22%20y%3D%2279%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E9%94%99%E8%AF%AF%E7%AD%94%E6%A1%88%3C%2Ftext%3E%3Ctext%20x%3D%22165%22%20y%3D%22108%22%20font-size%3D%2211%22%20text-anchor%3D%22middle%22%20fill%3D%22currentColor%22%3E%E5%AE%A2%E6%88%B7%E7%AB%AF%E5%8F%AF%E8%83%BD%E8%A2%AB%E8%AF%AF%E5%AF%BC%EF%BC%8C%E4%BD%86%E4%B8%8D%E4%BB%A3%E8%A1%A8%E7%BC%93%E5%AD%98%E5%B7%B2%E7%BB%8F%E6%94%B9%E5%8F%98%3C%2Ftext%3E%3C%2Fsvg%3E)
+
+> 该图片由 GPT 讲解时自动生成
+
+先安装需要的 `netwox` 工具。`netwox` 是一个包含两百多种网络探测与测试工具的工具箱。
+
+```bash
+sudo add-apt-repository universe # 启用 universe 仓库
+sudo apt update
+sudo apt install netwox
+```
+
+
+
+## 缓存投毒（未完成）
+
+![img](data:image/svg+xml;charset=utf-8,%3Csvg%20font-family%3D%22-apple-system-body%2C%20ui-sans-serif%2C%20-apple-system%2C%20system-ui%2C%20Segoe%20UI%2C%20Helvetica%2C%20Apple%20Color%20Emoji%2C%20Arial%2C%20sans-serif%2C%20Segoe%20UI%20Emoji%2C%20Segoe%20UI%20Symbol%22%20font-weight%3D%22400%22%20data-d-component%3D%22svg%22%20fill%3D%22currentColor%22%20style%3D%22color%3Argb(13%2C%2013%2C%2013)%22%20viewBox%3D%220%200%20330%20124%22%20width%3D%22100%25%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20x%3D%229%22%20y%3D%2226%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23FBE6E2%22%2F%3E%3Ctext%20x%3D%2254%22%20y%3D%2245%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23A54335%22%3E%E4%BC%AA%E9%80%A0%E5%BA%94%E7%AD%94%3C%2Ftext%3E%3Ctext%20x%3D%2254%22%20y%3D%2260%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E6%94%BB%E5%87%BB%E7%AB%AF%3C%2Ftext%3E%3Crect%20x%3D%22231%22%20y%3D%2226%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23DDEBFA%22%2F%3E%3Ctext%20x%3D%22276%22%20y%3D%2245%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23245B96%22%3EDNS%20%E7%BC%93%E5%AD%98%3C%2Ftext%3E%3Ctext%20x%3D%22276%22%20y%3D%2260%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23245B96%22%3E%E6%9C%8D%E5%8A%A1%E7%AB%AF%3C%2Ftext%3E%3Cpath%20d%3D%22M99%2049%20H228%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.8%22%20stroke-dasharray%3D%225%204%22%2F%3E%3Cpath%20d%3D%22M220%2044%20L229%2049%20L220%2054%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.8%22%20fill%3D%22none%22%2F%3E%3Ctext%20x%3D%22164%22%20y%3D%2238%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E9%94%99%E8%AF%AF%E8%AE%B0%E5%BD%95%E8%A2%AB%E6%8E%A5%E5%8F%97%3C%2Ftext%3E%3Ctext%20x%3D%22165%22%20y%3D%22100%22%20font-size%3D%2211%22%20text-anchor%3D%22middle%22%20fill%3D%22currentColor%22%3E%E5%90%8E%E7%BB%AD%E6%9F%A5%E8%AF%A2%E5%8F%AF%E8%83%BD%E7%BB%A7%E7%BB%AD%E5%8F%96%E5%BE%97%E7%BC%93%E5%AD%98%E4%B8%AD%E7%9A%84%E9%94%99%E8%AF%AF%E7%AD%94%E6%A1%88%3C%2Ftext%3E%3C%2Fsvg%3E)

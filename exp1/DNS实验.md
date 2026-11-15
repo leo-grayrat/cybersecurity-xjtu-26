@@ -489,6 +489,8 @@ weibo.com.		172628	NS	ns1.sina.com.cn.
 
 > 该图片由 GPT 讲解时自动生成
 
+### 准备工作
+
 先安装需要的 `netwox` 工具。`netwox` 是一个包含两百多种网络探测与测试工具的工具箱。
 
 ```bash
@@ -497,12 +499,111 @@ sudo apt update
 sudo apt install netwox
 ```
 
-# 由于遇到较大的技术问题以及近日各种考试，后续步骤遇到了一定的时间问题；会在第二天早上之前完成
+> 然而安装这一步遇到了网络问题。
+>
+> ![image-20261116004403958](./DNS实验.assets/image-20261116004403958.png)
+>
+> `Temporary failure resolving 'us.archive.ubuntu.com'` 是域名解析临时失败。系统显示有 84 个包可升级，说明 **APT 的本地缓存是正常的**，那么有可能是 DNS 或者 网络连接问题。
+>
+> ```bash
+> ping -c 4 8.8.8.8
+> ```
+>
+> 测试延迟后惊奇的发现——ping失败了，丢包率百分百。我尝试打开百度验证，发现网页也打不开。
+>
+> 此时我不禁开始担心脆弱的网络配置是否出了岔子~~毕竟这是纯纯在GPT指导下在VMWare里面配置的DNS之类的~~
+>
+> 于是我为了交叉验证到了131的攻击端做了实验，进行 `ping` 之后发现**竟然也完全丢包**！
+>
+> 一时有些绝望，但这时想起来了[之前访问微博时是正常的](####访问微博 查看缓存)，虽然页面没有加载但是成功跳转到了对应的登陆网址，130机器上也留下了记录。
+>
+> 于是打开百度进行验证，结果非常顺畅。
+>
+> ![image-20261116003749693](./DNS实验.assets/image-20261116003749693.png)
+>
+> 到这里我突然想到，130由于[之前配置后发现有问题](###设置为IPv4直连)所以切回直连了，后来恢复的时候**没有填DNS**、只填了IP地址/掩码/网关。
+>
+> ![image-20261116015900855](./DNS实验.assets/image-20261116015900855.png)
+>
+> 因为当时突然忘记具体DNS了，于是只填了其余项，之前[互联成功](####互联成功)也让我放松了警惕，想着 反正DNS也不会影响联网，无非自动选择DNS……但结果很搞笑
+>
+> ![image-20261116015247657](./DNS实验.assets/image-20261116015247657.png)
+>
+> 补上 DNS 之后，网络连接和包抓取均正常了。
+>
+> ![image-20261116020514167](./DNS实验.assets/image-20261116020514167.png)
+>
+> **AI 替代大脑开始跟着傻瓜教程一步步流水线式操作迟早出问题**……
+
+#### DNS 欺骗演示
+
+使用 `netwox 105` 工具构造了 DNS 应答：
+
+```bash
+sudo netwox 105 	
+	-h "www.google.com"  			#模拟应答的域名
+	-H "182.61.200.6" 				#伪造的地址
+	-a "ns.example.com" 			#应答中的名称服务器信息
+	-A "192.168.0.10" 				#对应名称服务器的地址信息
+	-f "src host 192.168.187.132"	#抓包过滤条件, 132为测试机
+	-d ens33						#网络接口名称
+```
+
+> **抓包接口不能直接照抄。**
+>
+> 文档使用的 `ens33` 是示例虚拟机中的接口名称。
+>
+> 如果实际机器的接口不同，就需要通过：
+>
+> ```
+> ip addr
+> ```
+>
+> 查看实际网卡名称。
+>
+> ---
+>
+> GPT 如是警告，不过似乎对于这台光板虚拟机这并不成问题，大概是默认端口名。
+
+![image-20261116022750160](./DNS实验.assets/image-20261116022750160.png)
+
+在**测试机 122** 中进行测试，结果如预期：
+
+![](./DNS实验.assets/屏幕截图 2026-11-16 022701.png)
+
+两次查询都返回了 `182.61.200.6` ，且可以观察到应答中带有 `ns.example.com` 等信息，符合实验配置。
+
+## 缓存投毒（未完成）
+
+![img](data:image/svg+xml;charset=utf-8,%3Csvg%20font-family%3D%22-apple-system-body%2C%20ui-sans-serif%2C%20-apple-system%2C%20system-ui%2C%20Segoe%20UI%2C%20Helvetica%2C%20Apple%20Color%20Emoji%2C%20Arial%2C%20sans-serif%2C%20Segoe%20UI%20Emoji%2C%20Segoe%20UI%20Symbol%22%20font-weight%3D%22400%22%20data-d-component%3D%22svg%22%20fill%3D%22currentColor%22%20style%3D%22color%3Argb(13%2C%2013%2C%2013)%22%20viewBox%3D%220%200%20330%20124%22%20width%3D%22100%25%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20x%3D%229%22%20y%3D%2226%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23FBE6E2%22%2F%3E%3Ctext%20x%3D%2254%22%20y%3D%2245%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23A54335%22%3E%E4%BC%AA%E9%80%A0%E5%BA%94%E7%AD%94%3C%2Ftext%3E%3Ctext%20x%3D%2254%22%20y%3D%2260%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E6%94%BB%E5%87%BB%E7%AB%AF%3C%2Ftext%3E%3Crect%20x%3D%22231%22%20y%3D%2226%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23DDEBFA%22%2F%3E%3Ctext%20x%3D%22276%22%20y%3D%2245%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23245B96%22%3EDNS%20%E7%BC%93%E5%AD%98%3C%2Ftext%3E%3Ctext%20x%3D%22276%22%20y%3D%2260%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23245B96%22%3E%E6%9C%8D%E5%8A%A1%E7%AB%AF%3C%2Ftext%3E%3Cpath%20d%3D%22M99%2049%20H228%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.8%22%20stroke-dasharray%3D%225%204%22%2F%3E%3Cpath%20d%3D%22M220%2044%20L229%2049%20L220%2054%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.8%22%20fill%3D%22none%22%2F%3E%3Ctext%20x%3D%22164%22%20y%3D%2238%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E9%94%99%E8%AF%AF%E8%AE%B0%E5%BD%95%E8%A2%AB%E6%8E%A5%E5%8F%97%3C%2Ftext%3E%3Ctext%20x%3D%22165%22%20y%3D%22100%22%20font-size%3D%2211%22%20text-anchor%3D%22middle%22%20fill%3D%22currentColor%22%3E%E5%90%8E%E7%BB%AD%E6%9F%A5%E8%AF%A2%E5%8F%AF%E8%83%BD%E7%BB%A7%E7%BB%AD%E5%8F%96%E5%BE%97%E7%BC%93%E5%AD%98%E4%B8%AD%E7%9A%84%E9%94%99%E8%AF%AF%E7%AD%94%E6%A1%88%3C%2Ftext%3E%3C%2Fsvg%3E)
+
+### 准备工作
+
+先**注释掉** `example.com` **区域**，然后清空缓存并重新启动 BIND9。
+
+> 此处有些奇怪，我对照GPT的讲解做的，此前讲解中[确有此步](####`named.conf`)；
+>
+> 然而我回到原文的时候却发现我**没找到有说过**在 `named.conf` 中声明这段的部分
+>
+> ```
+> zone "example.com" {
+>     type master;
+>     file "/etc/bind/example.com.db";
+> };
+> ```
+
+因为前面主要测试的是自己的**权威 DNS 区域**，也就是**已知的本地** DNS 及网络信息。
+
+而后面的缓存投毒实验是希望 130 去**外部查询**一个它没有现成信息的域名，从而出现上游应答。
+
+所以原文临时注释相关区域，再清空缓存并重新启动 BIND9。
+
+![image-20261116025100370](./DNS实验.assets/image-20261116025100370.png)
+
+# 由于遇到较大的技术问题以及近日各种考试，后续步骤遇到了一定的时间问题；会在第二天早上之前完成 吗？
 
 届时将会发给助教以及及时更新在 https://github.com/leo-grayrat/cybersecurity-xjtu-26/blob/master/exp1/DNS%E5%AE%9E%E9%AA%8C.md
 
 十分抱歉再次拖延！确实不熟悉 Linux 以及网络相关操作 qwq
 
-## 缓存投毒（未完成）
-
-![img](data:image/svg+xml;charset=utf-8,%3Csvg%20font-family%3D%22-apple-system-body%2C%20ui-sans-serif%2C%20-apple-system%2C%20system-ui%2C%20Segoe%20UI%2C%20Helvetica%2C%20Apple%20Color%20Emoji%2C%20Arial%2C%20sans-serif%2C%20Segoe%20UI%20Emoji%2C%20Segoe%20UI%20Symbol%22%20font-weight%3D%22400%22%20data-d-component%3D%22svg%22%20fill%3D%22currentColor%22%20style%3D%22color%3Argb(13%2C%2013%2C%2013)%22%20viewBox%3D%220%200%20330%20124%22%20width%3D%22100%25%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20x%3D%229%22%20y%3D%2226%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23FBE6E2%22%2F%3E%3Ctext%20x%3D%2254%22%20y%3D%2245%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23A54335%22%3E%E4%BC%AA%E9%80%A0%E5%BA%94%E7%AD%94%3C%2Ftext%3E%3Ctext%20x%3D%2254%22%20y%3D%2260%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E6%94%BB%E5%87%BB%E7%AB%AF%3C%2Ftext%3E%3Crect%20x%3D%22231%22%20y%3D%2226%22%20width%3D%2290%22%20height%3D%2246%22%20rx%3D%227%22%20fill%3D%22%23DDEBFA%22%2F%3E%3Ctext%20x%3D%22276%22%20y%3D%2245%22%20text-anchor%3D%22middle%22%20font-size%3D%2212%22%20font-weight%3D%22600%22%20fill%3D%22%23245B96%22%3EDNS%20%E7%BC%93%E5%AD%98%3C%2Ftext%3E%3Ctext%20x%3D%22276%22%20y%3D%2260%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23245B96%22%3E%E6%9C%8D%E5%8A%A1%E7%AB%AF%3C%2Ftext%3E%3Cpath%20d%3D%22M99%2049%20H228%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.8%22%20stroke-dasharray%3D%225%204%22%2F%3E%3Cpath%20d%3D%22M220%2044%20L229%2049%20L220%2054%22%20stroke%3D%22%23A54335%22%20stroke-width%3D%221.8%22%20fill%3D%22none%22%2F%3E%3Ctext%20x%3D%22164%22%20y%3D%2238%22%20text-anchor%3D%22middle%22%20font-size%3D%2210%22%20fill%3D%22%23A54335%22%3E%E9%94%99%E8%AF%AF%E8%AE%B0%E5%BD%95%E8%A2%AB%E6%8E%A5%E5%8F%97%3C%2Ftext%3E%3Ctext%20x%3D%22165%22%20y%3D%22100%22%20font-size%3D%2211%22%20text-anchor%3D%22middle%22%20fill%3D%22currentColor%22%3E%E5%90%8E%E7%BB%AD%E6%9F%A5%E8%AF%A2%E5%8F%AF%E8%83%BD%E7%BB%A7%E7%BB%AD%E5%8F%96%E5%BE%97%E7%BC%93%E5%AD%98%E4%B8%AD%E7%9A%84%E9%94%99%E8%AF%AF%E7%AD%94%E6%A1%88%3C%2Ftext%3E%3C%2Fsvg%3E)
+11-16凌晨：这个人没救了

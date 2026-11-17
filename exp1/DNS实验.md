@@ -617,7 +617,43 @@ pip install scapy==2.5.0		# Scapy 从 2.5.0 版本之后就不再支持 Python 2
 
 上面两条里面选择一条即可……吗？
 
-事实上我选用上述
+> ```bash
+> dnsserver@server:~/Desktop$ python 1.py
+> ERROR: Loading module scapy.layers.mspac
+> Traceback (most recent call last):
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/main.py", line 156, in _load
+>     mod = importlib.import_module(module)
+>   File "/usr/lib/python2.7/importlib/__init__.py", line 37, in import_module
+>     __import__(name)
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/layers/mspac.py", line 482, in <module>
+>     class CLAIM_ENTRY(NDRPacket):
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/layers/mspac.py", line 486, in CLAIM_ENTRY
+>     NDRInt3264EnumField("Type", 0, CLAIM_TYPE),
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/layers/dcerpc.py", line 1102, in __init__
+>     _NDREnumField(*args, **kwargs), align=(2, 4)
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/fields.py", line 2467, in __init__
+>     keys = list(enum)  # type: ignore
+> TypeError: 'type' object is not iterable
+> ('up_domain', 'example.com')
+> Traceback (most recent call last):
+>   File "1.py", line 136, in <module>
+>     start_poison(traget_DNS_server,traget_domain)
+>   File "1.py", line 97, in start_poison
+>     IP_list = Get_target_IP_list(traget_DNS_server,up_domain)
+>   File "1.py", line 32, in Get_target_IP_list
+>     ans = sr1(IP(dst=target_server)/UDP(sport=RandShort(), dport=53)/DNS(rd=1,qd=DNSQR(qname=domain,qtype="NS")))
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/sendrecv.py", line 663, in sr1
+>     ans, _ = sr(*args, **kargs)
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/sendrecv.py", line 651, in sr
+>     iface=iface, nofilter=nofilter)
+>   File "/home/dnsserver/.local/lib/python2.7/site-packages/scapy/arch/linux.py", line 485, in __init__
+>     socket.AF_PACKET, socket.SOCK_RAW, socket.htons(type))
+>   File "/usr/lib/python2.7/socket.py", line 191, in __init__
+>     _sock = _realsocket(family, type, proto)
+> socket.error: [Errno 1] Operation not permitted
+> ```
+>
+> ·
 
 然后运行投毒程序（附件中的）：
 
@@ -753,6 +789,18 @@ start_poison(traget_DNS_server,traget_domain)
 ```
 
 在运行之前
+
+
+
+
+
+![image-20261117010712085](./DNS实验.assets/image-20261117010712085.png)
+
+![image-20261117011422284](./DNS实验.assets/image-20261117011422284.png)
+
+![image-20261117012232054](./DNS实验.assets/image-20261117012232054.png)
+
+![image-20261117045541941](./DNS实验.assets/image-20261117045541941.png)
 
 # 由于遇到较大的技术问题以及近日各种考试，后续步骤遇到了一定的时间问题；会在第二天早上之前完成 吗？
 
